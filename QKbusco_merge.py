@@ -14,6 +14,8 @@
 # are all fragmented genes single copy?
 
 ## Modules
+import math
+
 import optparse
 from optparse import OptionParser 
 
