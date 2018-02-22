@@ -20,7 +20,7 @@ CAGTTCGATCGAGGATGACGTTGTTTACGAGAGATGCCATTGTGGAGCGTTGCACCGGCACCTCAGCACCTGGGGACACT
 ...
 ```
 
-First, a white space delimited text file must be generated that contains the following:
+A master file that is white space (space or tab) delimited text file must be generated that contains the following information:
   1) Abbreviation of the species (or accession)
   2) FASTA file of transcriptome (or ORFs) sequence
   3) Full table from BUSCO analysis
