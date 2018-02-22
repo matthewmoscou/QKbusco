@@ -26,6 +26,10 @@ import stats
 
 import string
 
+import time
+from time import gmtime, strftime
+
+
 ## OptionParser
 # import arguments and options
 usage = "usage: %prog -d depth -s superalignment.phy [PHYLIP_output]"
@@ -49,11 +53,11 @@ def convert_phylip(phylip_input, phylip_output):
 	for gene_index in range(genes):
 		line = Fopen.readline()
 		gene = string.split(line)[0]
-		gene_alignment = ''
+		species_alignment = ''
 
 		for sequence_index in range(int(math.ceil(alignment_length / 60.0))):
 			line = Fopen.readline()
-			gene_alignment += string.split(line)[0]
+			species_alignment += string.split(line)[0]
 
 		Fout.write(gene)
 		
@@ -62,14 +66,14 @@ def convert_phylip(phylip_input, phylip_output):
 
 		Fout.write('  ')
 
-		Fout.write(gene_alignment + '\n')
+		Fout.write(species_alignment + '\n')
 	
 	Fopen.close()
 	Fout.close()
 	return
 
 def parse_phylip(phylip_input):
-	gene_alignment = {}
+	species_alignment = {}
 
 	Fopen = open(phylip_input, 'r')
 
@@ -77,62 +81,81 @@ def parse_phylip(phylip_input):
 	line = Fopen.readline()
 
 	while line:
-		gene, alignment = string.split(line)
-		gene_alignment[gene] = alignment
+		species, alignment = string.split(line)
+
+		species_alignment[species] = alignment
 
 		line = Fopen.readline()
 	
 	Fopen.close()
 
-	return gene_alignment
+	return species_alignment
 
 def main():
 	species_busco_genes = {}
 	species_superalignment = {}
 
+	# intialize species_busco_genes with species BUSCO hits
+	for arg in args:
+		print arg
+		convert_phylip(arg, string.replace(arg, '.best.phy', ''))
+		species_alignment = parse_phylip(string.replace(arg, '.best.phy', ''))
+
+		for species in species_alignment.keys():
+			species_information = string.split(species, '_')
+
+			species_busco_genes[species_information[0]] = []
+
 	# for every phylip file, convert to relaxed Phylip format
 	# run QKphylogeny_alignment_analysis.py
 	for arg in args:
-		convert_phylip(arg, string.replace(arg, '.best.phy', ''))
+		print 'superset:\t', arg, strftime("%Y-%m-%d %H:%M:%S", gmtime())
 
-		process_name = "python QKphylogeny_alignment_analysis.py -a %s -d %s -o %s" % (string.replace(arg, '.best.phy', ''), options.depth, string.replace(arg, '.phy.best.phy', '.e.phy'))
+		process_name = "python QKphylogeny_alignment_analysis.py -q -a %s -d %s -o %s" % (string.replace(arg, '.best.phy', ''), options.depth, string.replace(arg, '.phy.best.phy', '.e.phy'))
 		process = subprocess.Popen(process_name, shell = True)
 		process.wait()
 
 		# evaluate the super set of genes (for all species)
-		gene_alignment = parse_phylip(string.replace(arg, '.phy.best.phy', '.e.phy'))
+		species_alignment = parse_phylip(string.replace(arg, '.phy.best.phy', '.e.phy'))
 
-		for gene in gene_alignment.keys():
-			species_information = string.split(gene, '_')
-
-			if species_information[0] not in species_busco_genes.keys():
-				species_busco_genes[species_information[0]] = []
+		for species in species_alignment.keys():
+			species_information = string.split(species, '_')
 
 			species_busco_genes[species_information[0]].append(string.replace(arg, '.PRANK.phy.best.phy', ''))
-	
+
 	# concatenate all species, evaluate amount of missing data for every species
+	print species_busco_genes.keys()
 	for species in species_busco_genes.keys():
 		species_superalignment[species] = ''
 
 	for arg in args:
-		gene_alignment = parse_phylip(string.replace(arg, '.phy.best.phy', '.e.phy'))
+		print 'merge species:\t', arg, strftime("%Y-%m-%d %H:%M:%S", gmtime())
+		# read multiple sequence alignment
+		species_alignment = parse_phylip(string.replace(arg, '.phy.best.phy', '.e.phy'))
 
-		alignment_length = len(gene_alignment[gene_alignment.keys()[0]])
+		# set alignment length (for missing data)
+		alignment_length = len(species_alignment[species_alignment.keys()[0]])
+		missing_template = ''
 
-		for species in species_superalignment.keys():
-			present = False
+		for index in range(alignment_length):
+			missing_template += '-'
 
-			for gene in gene_alignment.keys():
-				species_information = string.split(gene, '_')
+		# add alignments for all species in alignment
+		species_present = []
 
-				if species_information[0] == species:
-					species_superalignment[species] += gene_alignment[gene]
-					present = True
+		for species in species_alignment.keys():
+			species_information = string.split(species, '_')
+			species_superalignment[species_information[0]] += species_alignment[species]
+			species_present.append(species_information[0])
 
-			if not present:
-				for index in range(alignment_length):
-					species_superalignment[species] += '-'
+		# add missing data for all other species not in the alignment
+		for species in list(sets.Set(species_superalignment.keys()) - sets.Set(species_present)):
+			species_superalignment[species] += missing_template
 	
+	# print the degree of missing data for each species
+	for species in species_superalignment.keys():
+		print species, species_superalignment[species].count('-'), len(species_superalignment[species])
+
 	# export concatenated alignment
 	Fopen = open(options.superalignment, 'w')
 	Fopen.write(' ' + str(len(species_superalignment.keys())) + ' ' + str(len(species_superalignment[species_superalignment.keys()[0]])) + '\n')
